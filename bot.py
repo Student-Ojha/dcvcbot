@@ -1,12 +1,10 @@
 import discord
 from discord.ext import commands
-from time import time
 from flask import Flask
 from threading import Thread
 import os
-import asyncio  # Import asyncio for delays
 
-# Web server setup for UptimeRobot to keep the bot alive
+# Flask app setup for keeping the bot alive
 app = Flask('')
 
 
@@ -27,59 +25,63 @@ def keep_alive():
 # Bot setup
 intents = discord.Intents.default()
 intents.voice_states = True
-intents.members = True
+intents.members = True  # Required to detect member activities
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Role and channel configurations
-NOTIFICATION_CHANNEL_NAME = "vc-notifications"  # Replace with your notification channel name
-ROLE_NAME = "VC Notifications"  # Replace with your role name
-recent_notifications = {}  # To track recent joins
-joined_users = {}  # To batch notifications for users joining simultaneously
+# Configuration
+NOTIFICATION_CHANNEL_NAME = "vc-notifications"  # Replace with your text channel name
+batch_notifications = {}  # Dictionary to store batch notifications
+
+
+# Startup Logging
+print("Attempting to start the bot...")
 
 
 @bot.event
 async def on_ready():
-    print(f"Bot is online and logged in as {bot.user}")
+    print("Bot has successfully started!")
+    print(f"Logged in as: {bot.user}")
+    print(f"Connected to guilds: {[guild.name for guild in bot.guilds]}")
 
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    if before.channel is None and after.channel is not None:  # User joined a voice channel
+    print(f"Voice state update detected for {member.name}")
+    if before.channel is None and after.channel is not None:  # User joins a voice channel
+        print(f"{member.name} joined {after.channel.name}")
         guild = member.guild
         notification_channel = discord.utils.get(
             guild.text_channels, name=NOTIFICATION_CHANNEL_NAME)
 
-        # Add the member to the joined_users dictionary for batching
-        if guild.id not in joined_users:
-            joined_users[guild.id] = []
-        joined_users[guild.id].append((member.name, after.channel.name))
+        if not notification_channel:
+            print(f"Notification channel '{NOTIFICATION_CHANNEL_NAME}' not found.")
+            return
 
-        # Wait 5 seconds to batch notifications
-        await asyncio.sleep(5)
+        # Add user to the batch notifications for this guild
+        if guild.id not in batch_notifications:
+            batch_notifications[guild.id] = []
+        batch_notifications[guild.id].append(f"{member.name} joined {after.channel.name}")
 
-        # Combine all notifications for the guild
-        if guild.id in joined_users and notification_channel:
-            try:
-                # Create a combined message for all users
-                messages = [
-                    f"{user} joined {channel}"
-                    for user, channel in joined_users[guild.id]
-                ]
-                combined_message = "\n".join(messages)
-
-                # Send the combined notification
-                await notification_channel.send(combined_message)
-                joined_users[guild.id] = []  # Clear the list after sending
-            except discord.errors.HTTPException as e:
-                print(f"Rate limit hit: {e}")
-        else:
-            print(
-                f"Notification channel '{NOTIFICATION_CHANNEL_NAME}' not found."
-            )
+        # Process batch notifications with a delay
+        await process_notifications(guild, notification_channel)
 
 
-# Keep the bot alive and run it
+async def process_notifications(guild, notification_channel):
+    await asyncio.sleep(5)  # Wait 5 seconds to collect all join events
+    if guild.id in batch_notifications and batch_notifications[guild.id]:
+        try:
+            # Combine all notifications into one message
+            combined_message = "\n".join(batch_notifications[guild.id])
+            print(f"Sending notifications:\n{combined_message}")
+            await notification_channel.send(combined_message)
+            print(f"Notifications sent successfully for guild {guild.id}")
+            batch_notifications[guild.id] = []  # Clear batch after sending
+        except discord.errors.HTTPException as e:
+            print(f"Rate limit hit: {e}")
+        except Exception as e:
+            print(f"Error while sending notifications: {e}")
+
+
+# Keep Flask alive and start the bot
 keep_alive()
-TOKEN = os.environ[
-    'DISCORD_BOT_TOKEN']  # Use the environment variable for the token
-bot.run(TOKEN)
+bot.run(os.environ['DISCORD_BOT_TOKEN'])
