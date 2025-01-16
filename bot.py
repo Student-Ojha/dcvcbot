@@ -30,7 +30,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Configuration
 NOTIFICATION_CHANNEL_NAME = "vc-notifications"  # Replace with your text channel name
-batch_notifications = {}  # Dictionary to store batch notifications
 
 
 # Startup Logging
@@ -46,8 +45,9 @@ async def on_ready():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    print(f"Voice state update detected for {member.name}")
-    if before.channel is None and after.channel is not None:  # User joins a voice channel
+    print(f"Voice state updated for {member.name}: Before: {before.channel}, After: {after.channel}")
+
+    if before.channel is None and after.channel is not None:  # User joined a voice channel
         print(f"{member.name} joined {after.channel.name}")
         guild = member.guild
         notification_channel = discord.utils.get(
@@ -57,31 +57,18 @@ async def on_voice_state_update(member, before, after):
             print(f"Notification channel '{NOTIFICATION_CHANNEL_NAME}' not found.")
             return
 
-        # Add user to the batch notifications for this guild
-        if guild.id not in batch_notifications:
-            batch_notifications[guild.id] = []
-        batch_notifications[guild.id].append(f"{member.name} joined {after.channel.name}")
-
-        # Process batch notifications with a delay
-        await process_notifications(guild, notification_channel)
-
-
-async def process_notifications(guild, notification_channel):
-    await asyncio.sleep(5)  # Wait 5 seconds to collect all join events
-    if guild.id in batch_notifications and batch_notifications[guild.id]:
         try:
-            # Combine all notifications into one message
-            combined_message = "\n".join(batch_notifications[guild.id])
-            print(f"Sending notifications:\n{combined_message}")
-            await notification_channel.send(combined_message)
-            print(f"Notifications sent successfully for guild {guild.id}")
-            batch_notifications[guild.id] = []  # Clear batch after sending
-        except discord.errors.HTTPException as e:
-            print(f"Rate limit hit: {e}")
+            await notification_channel.send(f"{member.name} joined {after.channel.name}")
+            print(f"Notification sent for {member.name}")
         except Exception as e:
-            print(f"Error while sending notifications: {e}")
+            print(f"Failed to send notification: {e}")
+
+
+def run_discord_bot():
+    print("Starting Discord bot...")
+    bot.run(os.environ['DISCORD_BOT_TOKEN'])
 
 
 # Keep Flask alive and start the bot
 keep_alive()
-bot.run(os.environ['DISCORD_BOT_TOKEN'])
+run_discord_bot()
