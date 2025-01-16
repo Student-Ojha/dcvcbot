@@ -6,7 +6,7 @@ from threading import Thread
 import os
 import asyncio  # Import asyncio for delays
 
-# Web server setup for Replit to keep the bot alive
+# Web server setup for UptimeRobot to keep the bot alive
 app = Flask('')
 
 
@@ -34,6 +34,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 NOTIFICATION_CHANNEL_NAME = "vc-notifications"  # Replace with your notification channel name
 ROLE_NAME = "VC Notifications"  # Replace with your role name
 recent_notifications = {}  # To track recent joins
+joined_users = {}  # To batch notifications for users joining simultaneously
 
 
 @bot.event
@@ -43,28 +44,32 @@ async def on_ready():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    # Check if the user joins a voice channel
-    if before.channel is None and after.channel is not None:
+    if before.channel is None and after.channel is not None:  # User joined a voice channel
         guild = member.guild
         notification_channel = discord.utils.get(
             guild.text_channels, name=NOTIFICATION_CHANNEL_NAME)
 
-        # Cooldown logic: avoid duplicate notifications
-        now = time()
-        if member.id in recent_notifications:
-            last_notification = recent_notifications[member.id]
-            if now - last_notification < 30:  # Increased to 30 seconds cooldown
-                return
-        recent_notifications[member.id] = now
+        # Add the member to the joined_users dictionary for batching
+        if guild.id not in joined_users:
+            joined_users[guild.id] = []
+        joined_users[guild.id].append((member.name, after.channel.name))
 
-        # Minimalistic notification message
-        message = f"{member.name} joined {after.channel.name}."
+        # Wait 5 seconds to batch notifications
+        await asyncio.sleep(5)
 
-        # Send the message to the notification channel
-        if notification_channel:
+        # Combine all notifications for the guild
+        if guild.id in joined_users and notification_channel:
             try:
-                await notification_channel.send(message)
-                await asyncio.sleep(1)  # Add a small delay to avoid rate limits
+                # Create a combined message for all users
+                messages = [
+                    f"{user} joined {channel}"
+                    for user, channel in joined_users[guild.id]
+                ]
+                combined_message = "\n".join(messages)
+
+                # Send the combined notification
+                await notification_channel.send(combined_message)
+                joined_users[guild.id] = []  # Clear the list after sending
             except discord.errors.HTTPException as e:
                 print(f"Rate limit hit: {e}")
         else:
