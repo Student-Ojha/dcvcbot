@@ -1,10 +1,10 @@
-
 import discord
 from discord.ext import commands
 from time import time
 from flask import Flask
 from threading import Thread
-import os  # Import the os module to access environment variables
+import os
+import asyncio  # Import asyncio for delays
 
 # Web server setup for Replit to keep the bot alive
 app = Flask('')
@@ -53,7 +53,7 @@ async def on_voice_state_update(member, before, after):
         now = time()
         if member.id in recent_notifications:
             last_notification = recent_notifications[member.id]
-            if now - last_notification < 10:  # 10 seconds cooldown
+            if now - last_notification < 30:  # Increased to 30 seconds cooldown
                 return
         recent_notifications[member.id] = now
 
@@ -62,7 +62,11 @@ async def on_voice_state_update(member, before, after):
 
         # Send the message to the notification channel
         if notification_channel:
-            await notification_channel.send(message)
+            try:
+                await notification_channel.send(message)
+                await asyncio.sleep(1)  # Add a small delay to avoid rate limits
+            except discord.errors.HTTPException as e:
+                print(f"Rate limit hit: {e}")
         else:
             print(
                 f"Notification channel '{NOTIFICATION_CHANNEL_NAME}' not found."
