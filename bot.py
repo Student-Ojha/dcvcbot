@@ -27,8 +27,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 NOTIFICATION_CHANNEL_NAME = "vc-notifications"  # Replace with your text channel name
 
-# To track recent notifications and prevent duplicates
-recent_notifications = {}  # Dictionary to store timestamps of recent notifications
+# Store recent joins to prevent duplicate notifications
+recent_joins = set()  # A set to track users who recently joined
 
 
 @bot.event
@@ -42,6 +42,18 @@ async def on_ready():
 async def on_voice_state_update(member, before, after):
     # Ensure this event only triggers when a member joins a voice channel
     if before.channel is None and after.channel is not None:  # User joined a voice channel
+        print(f"{member.name} joined {after.channel.name}")
+
+        # Prevent duplicate notifications using a cooldown
+        if member.id in recent_joins:
+            print(f"Duplicate notification suppressed for {member.name}.")
+            return
+
+        # Add user to recent joins with a cooldown
+        recent_joins.add(member.id)
+        asyncio.get_event_loop().call_later(5, lambda: recent_joins.remove(member.id))  # 5-second cooldown
+
+        # Get the notification channel
         guild = member.guild
         notification_channel = discord.utils.get(
             guild.text_channels, name=NOTIFICATION_CHANNEL_NAME
@@ -51,17 +63,7 @@ async def on_voice_state_update(member, before, after):
             print("Notification channel not found.")
             return
 
-        # Cooldown logic to prevent duplicate notifications
-        now = asyncio.get_event_loop().time()
-        if member.id in recent_notifications:
-            last_notification = recent_notifications[member.id]
-            if now - last_notification < 5:  # 5 seconds cooldown
-                print(f"Duplicate notification prevented for {member.name}.")
-                return
-
-        # Update the recent notification timestamp
-        recent_notifications[member.id] = now
-
+        # Send the notification
         try:
             await notification_channel.send(f"{member.name} joined {after.channel.name}")
             print(f"Notification sent for {member.name}")
