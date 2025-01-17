@@ -27,19 +27,21 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 NOTIFICATION_CHANNEL_NAME = "vc-notifications"  # Replace with your text channel name
 
+# To track recent notifications and prevent duplicates
+recent_notifications = {}  # Dictionary to store timestamps of recent notifications
+
+
 @bot.event
 async def on_ready():
     print(f"Bot has successfully started!")
     print(f"Logged in as: {bot.user}")
     print(f"Connected to guilds: {[guild.name for guild in bot.guilds]}")
 
+
 @bot.event
 async def on_voice_state_update(member, before, after):
-    print(f"Voice state updated for {member.name}: Before: {before.channel}, After: {after.channel}")
-
+    # Ensure this event only triggers when a member joins a voice channel
     if before.channel is None and after.channel is not None:  # User joined a voice channel
-        print(f"{member.name} joined {after.channel.name}")
-
         guild = member.guild
         notification_channel = discord.utils.get(
             guild.text_channels, name=NOTIFICATION_CHANNEL_NAME
@@ -49,11 +51,23 @@ async def on_voice_state_update(member, before, after):
             print("Notification channel not found.")
             return
 
+        # Cooldown logic to prevent duplicate notifications
+        now = asyncio.get_event_loop().time()
+        if member.id in recent_notifications:
+            last_notification = recent_notifications[member.id]
+            if now - last_notification < 5:  # 5 seconds cooldown
+                print(f"Duplicate notification prevented for {member.name}.")
+                return
+
+        # Update the recent notification timestamp
+        recent_notifications[member.id] = now
+
         try:
             await notification_channel.send(f"{member.name} joined {after.channel.name}")
             print(f"Notification sent for {member.name}")
         except Exception as e:
             print(f"Failed to send notification: {e}")
+
 
 async def start_bot():
     retries = 0
