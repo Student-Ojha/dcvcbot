@@ -2,6 +2,22 @@ import discord
 from discord.ext import commands
 import asyncio
 import os
+from flask import Flask
+from threading import Thread
+
+# Flask app to keep the bot alive
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
 # Bot setup
 intents = discord.Intents.default()
@@ -11,13 +27,11 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 NOTIFICATION_CHANNEL_NAME = "vc-notifications"  # Replace with your text channel name
 
-
 @bot.event
 async def on_ready():
     print(f"Bot has successfully started!")
     print(f"Logged in as: {bot.user}")
     print(f"Connected to guilds: {[guild.name for guild in bot.guilds]}")
-
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -41,7 +55,6 @@ async def on_voice_state_update(member, before, after):
         except Exception as e:
             print(f"Failed to send notification: {e}")
 
-
 async def start_bot():
     retries = 0
     while retries < 5:  # Retry up to 5 times
@@ -61,4 +74,8 @@ async def start_bot():
     else:
         print("Failed to start bot after multiple attempts.")
 
+# Start the keep-alive server
+keep_alive()
+
+# Run the bot
 asyncio.run(start_bot())
